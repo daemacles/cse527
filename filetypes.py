@@ -61,7 +61,9 @@ class Sequence(object):
 
 class TwoBitSeq(Sequence):
 
-    base_lut = np.array(map(ord, ['T', 'C', 'A', 'G']), dtype=np.uint8)
+    #                    T C A G
+    base_lut = np.array([0,1,2,3], dtype=np.uint8)
+    #base_lut = np.array(map(ord, ['T', 'C', 'A', 'G']), dtype=np.uint8)
     
     def __init__(self, data, offset, name):
         self.name = name
@@ -90,35 +92,14 @@ class TwoBitSeq(Sequence):
             else: start = name.start
             result = twobit_decode(self.data, self.base_lut, self._seq_start,
                                  start, name.stop)
-            '''
-            length = name.stop - start
-            byte_quotient = length / 4
-            byte_remainder = length % 4
-            num = byte_quotient + byte_remainder
-            result = np.zeros(num*4, dtype=np.uint8)
-            idx = (start/4) + self._seq_start
-            res_idx = 0
-            while num > 0:
-                next_byte = data[idx]
-                idx += 1
-                num -= 1
-                bases = (base_lut[(next_byte & 0xC0) >> 6],
-                         base_lut[(next_byte & 0x30) >> 4],
-                         base_lut[(next_byte & 0x0C) >> 2],
-                         base_lut[(next_byte & 0x03) >> 0])
-                result[res_idx:res_idx+4] = bases
-                res_idx += 4
-            result = result[:length]
-            '''
         except:
             next_byte = data[name/4 + self._seq_start]
             bases = (base_lut[(next_byte & 0xC0) >> 6],
                      base_lut[(next_byte & 0x30) >> 4],
                      base_lut[(next_byte & 0x0C) >> 2],
                      base_lut[(next_byte & 0x03) >> 0])
-            result = bases[name % 4]
+            result = np.array([bases[name % 4]])
         return result
-
         
 class TwoBit(object):
     '''
@@ -131,10 +112,12 @@ class TwoBit(object):
         '''
         filename - string
         '''
-        
+
         self.filename = filename
+        parts = filename.split('/')
+        basename = '/'.join(parts[:-1])
+        self.name = parts[-1]
         self.type = '.2bit'
-        self.file = open(filename, 'rb')
         data = np.memmap(filename, dtype=np.uint8, mode='r')
         self.data = data
         
@@ -156,20 +139,20 @@ class TwoBit(object):
         self.sequenceCount = b_read.uint32()
         reserved = b_read.uint32()
 
-        # This implicitly maps sequence names to their offset in the file
+        # These (implicitly) maps sequence names to their offset in the file
         self.sequences = []
+        self.sequence_map = {}
 
         idx = 16
         for seq_idx in range(self.sequenceCount):
             nameSize = b_read.uint8()
-            name = b_read.char(nameSize)
+            name = ''.join(map(chr,b_read.char(nameSize)))
             offset = b_read.uint32()
-            self.sequences.append((name, TwoBitSeq(data, offset, name)))
+            tbs = TwoBitSeq(data, offset, name)
+            self.sequences.append((name, tbs))
+            self.sequence_map[name] = tbs
 
-        self.offset = self.sequences[0][1] # this is where the data starts in
-                                           # the file.
-        
-
+        self.total_size = sum(s[1].size for s in self.sequences)
         return
 
 
