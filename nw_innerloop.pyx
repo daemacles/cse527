@@ -26,15 +26,20 @@ cdef inline     int   int_max(    int a,     int b): return a if a >= b else b
 
 ##############################################################################
 # The Needleman-Wunsch Inner Loop
-@cython.boundscheck(False)      # turn off array bounds checking
+#@cython.boundscheck(False)      # turn off array bounds checking
 def nwil(np.ndarray[DTYPE_t,  ndim=2] v_matrix  not None, # value matrix
          np.ndarray[np.uint8_t, ndim=1] seq1    not None, # sequence 1
-         np.ndarray[np.uint8_t, ndim=1] seq2 not None, # sequence 2
+         np.ndarray[np.uint8_t, ndim=1] seq2    not None, # sequence 2
          np.ndarray[DTYPE_t,  ndim=2] cost_mx   not None, # cost matrix
-         gap_cost):                                       # gap cost
+         int gap_cost,                                    # gap cost
+         unsigned int s2_start = 0, # where to start in seq2
+         unsigned int s2_end = 0):  # where to end in seq2
 
     # Just do a double check here
     assert v_matrix.dtype == DTYPE and cost_mx.dtype == DTYPE
+
+    if s2_end == 0 or s2_end > seq2.shape[0]:
+        s2_end = seq2.shape[0]
 
     # Create type definitions so that cython can optimize out a lot of the
     # background type checking and conversion that python does by default.
@@ -43,7 +48,8 @@ def nwil(np.ndarray[DTYPE_t,  ndim=2] v_matrix  not None, # value matrix
     cdef unsigned int row, col
     cdef unsigned int my_base, other_base
     cdef unsigned int rows = seq1.shape[0] + 1
-    cdef unsigned int cols = seq2.shape[0] + 1
+    cdef unsigned int cols = s2_end + 1 #seq2.shape[0] + 1
+    cdef unsigned int col_idx
 
     # Fill in the value matrix.  This is done by working across the columns of
     # each row in turn, starting with row 1 and going down.  Accessing
@@ -52,10 +58,18 @@ def nwil(np.ndarray[DTYPE_t,  ndim=2] v_matrix  not None, # value matrix
     row = 1
     while row != rows:
         my_base = seq1[row-1] # sequences are offset by 1 in the matrix
-        col = 1
+        col = s2_start + 1
         while col != cols:
-            other_base = seq2[col-1] # sequences are offset by 1 in the
-                                          # matrix
+            col_idx = col - s2_start
+            try:
+                other_base = seq2[col-1] # sequences are offset by 1 in the
+                                     # matrix
+            except IndexError:
+                print 'seq2.shape', seq2.shape[0]
+                print 'col', col
+                print 's2 start', s2_start
+                print 's2 end', s2_end
+                import sys; sys.exit(1)
             
             # - Moving along the diagonal corresponds to matching my_base
             #   with other_base. (1)
@@ -63,10 +77,10 @@ def nwil(np.ndarray[DTYPE_t,  ndim=2] v_matrix  not None, # value matrix
             #   a dash after the optimal matching up till other_base. (2)
             # - Moving across a row corresponds to matching other_base with
             #   a dash after the optimal matching up till my_base. (3)
-            choice1 = v_matrix[row-1,col-1] + cost_mx[my_base, other_base]
-            choice2 = v_matrix[row-1,col  ] + cost
-            choice3 = v_matrix[row,  col-1] + cost
-            v_matrix[row,col] = float_max(choice1, float_max(choice2, choice3))
+            choice1 = v_matrix[row-1,col_idx-1] + cost_mx[my_base, other_base]
+            choice2 = v_matrix[row-1,col_idx  ] + cost
+            choice3 = v_matrix[row,  col_idx-1] + cost
+            v_matrix[row,col_idx] = float_max(choice1, float_max(choice2, choice3))
             col += 1
         row += 1
     return
@@ -79,10 +93,12 @@ def trackback(np.ndarray[DTYPE_t,  ndim=2] v_matrix  not None, # value matrix
               np.ndarray[np.uint8_t, ndim=1] seq1    not None, # sequence 1
               np.ndarray[np.uint8_t, ndim=1] seq2    not None, # sequence 2
               np.ndarray[DTYPE_t,  ndim=2] cost_mx   not None, # cost matrix
-              gap_cost):                                       # gap cost
+              int gap_cost):                                   # gap cost
+
     cdef unsigned int row = seq1.shape[0]
     cdef unsigned int col = seq2.shape[0]
     cdef unsigned char dash_val = 8
+
     
     # These are arrays of chars with a default value of ' ' (space)
     cdef unsigned int result_idx = int_max(row+1, col+1)*2

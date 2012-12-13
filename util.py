@@ -184,7 +184,7 @@ def align(seq1, seq2, gap_cost, cost_mx, v_matrix, BT=True):
     else:
         return score, '', ''
 
-def initValueMatrix(seq1, seq2, gap_cost):
+def initValueMatrix(len_seq1, len_seq2, gap_cost):
     '''
     This simply initializes a value matrix for use in the align
     method. Also creates a track back matrix for back tracking an optimal
@@ -193,9 +193,9 @@ def initValueMatrix(seq1, seq2, gap_cost):
     The rows are the elements of this sequence and the columns are the
     elements of seq2.
     '''
-    v_matrix = np.zeros([len(seq1)+1, len(seq2)+1],
+    v_matrix = np.zeros([len_seq1 + 1, len_seq2 + 1],
                         dtype=DTYPE)
-    v_matrix[0,:] = np.arange(len(seq2)+1) * gap_cost
-    v_matrix[:,0] = np.arange(len(seq1)+1) * gap_cost
+    v_matrix[0,:] = np.arange(len_seq2 + 1) * gap_cost
+    v_matrix[:,0] = np.arange(len_seq1 + 1) * gap_cost
     return v_matrix
     

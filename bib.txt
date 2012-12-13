@@ -4,3 +4,4 @@ http://en.wikipedia.org/wiki/Intron
                              Eukaryote_chromosome_fine_structure
                              
 http://genome.ucsc.edu/
+http://taotetek.wordpress.com/2011/02/02/python-multiprocessing-with-zeromq/

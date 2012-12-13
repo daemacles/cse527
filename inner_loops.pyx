@@ -21,6 +21,7 @@ ctypedef np.double_t DOUBLE_t
 ##############################################################################
 # Create custom MAX functions that don't bother with all of the regular Python
 # type checking etc.
+cdef inline DOUBLE_t float_max(DOUBLE_t a, DOUBLE_t b): return a if a >= b else b
 cdef inline int int_max(int a, int b): return a if a >= b else b
 
 ##############################################################################
@@ -95,20 +96,23 @@ def aaLookup(np.ndarray[BASETYPE_t, ndim=1] seq not None,
 ##############################################################################
 # Convolves a (short) guess sequence against a (longer) target sequence
 def convolveSubsequence(np.ndarray[BASETYPE_t, ndim=1] guess not None,
-                        np.ndarray[BASETYPE_t, ndim=1] target_seq not None):
-    cdef unsigned int num_tests = target_seq.shape[0] - guess.shape[0] + 1
+                        np.ndarray[BASETYPE_t, ndim=1] target_seq not None,
+                        score_deque):
+    cdef unsigned int slack = 1
     cdef unsigned int guess_len = guess.shape[0]
     cdef unsigned int target_len = target_seq.shape[0]
-    cdef np.ndarray v_matrix = util.initValueMatrix(guess, target_seq, -1)
-    cdef int score_max = -100000
-    cdef int score
+    cdef DOUBLE_t score_max
+    # Account for really short target sequences
+    cdef unsigned int num_tests = int_max(target_len - guess_len - slack + 1, 1)
+    cdef np.ndarray v_matrix = util.initValueMatrix(guess_len, guess_len+slack, -1)
     cdef unsigned int i
-    cdef unsigned int slack = 4
     for i in range(num_tests):
-        #nwil(v_matrix, guess, target_seq[i:guess_len+i+slack], util.nw_basepairs_cost, -1)
-        #score = v_matrix[guess_len, target_len]
-
-        score = util.align(guess, target_seq[i:guess_len+i+slack], -1,
-                           util.nw_basepairs_cost, v_matrix, False)[0]
-        score_max = int_max(score, score_max)
+        nwil(v_matrix, guess, target_seq, util.nw_basepairs_cost, -1,
+             i, i+guess_len+slack)
+        score = v_matrix[guess_len, guess_len+slack]
+        if score > guess_len - 2 - slack:
+            score_deque.append((i, score))
+        #score = util.align(guess, target_seq[i:guess_len+i+slack], -1,
+        #                   util.nw_basepairs_cost, v_matrix, False)[0]
+        score_max = float_max(score, score_max)
     return score_max

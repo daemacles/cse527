@@ -3,7 +3,10 @@ import os
 from filetypes import TwoBit
 import sqlite3
 import time
-from collections import namedtuple
+from collections import namedtuple, deque
+import heapq
+import sys
+import random
 
 from util import *
 import pyximport; pyximport.install()
@@ -223,6 +226,9 @@ class Genome(object):
         except AttributeError:
             raise AttributeError("Annotations database not yet created." +
                                  "Please run loadAnnotations().")
+        except sqlite3.ProgrammingError:
+            self.conn = sqlite3.connect(self.name + '.db')
+            c = self.conn.cursor()
         query = 'select cdsStart, cdsEnd, name, strand from annotations where seq_name=? order by cdsStart asc'
         return self._genericIter(c.execute(query, (seq_name,)), seq_name)
 
@@ -236,6 +242,9 @@ class Genome(object):
         except AttributeError:
             raise AttributeError("Annotations database not yet created." +
                                  "Please run loadAnnotations().")
+        except sqlite3.ProgrammingError:
+            self.conn = sqlite3.connect(self.name + '.db')
+            c = self.conn.cursor()
         query = 'select txStart, txEnd, name, strand from annotations where seq_name=? order by txStart asc'
         return self._genericIter(c.execute(query, (seq_name,)), seq_name)
         
@@ -249,6 +258,9 @@ class Genome(object):
         except AttributeError:
             raise AttributeError("Database not yet created." +
                                  "Please run .loadAnnotations().")
+        except sqlite3.ProgrammingError:
+            self.conn = sqlite3.connect(self.name + '.db')
+            c = self.conn.cursor()
         try:
             rows = c.execute('select start, end, name, strand from nongene where seq_name=? order by start asc',
                              (seq_name,))
@@ -256,6 +268,65 @@ class Genome(object):
             raise AttributeError("Database doesn't have the nongene table. " +
                                  "Please run .createNonGeneDB()")
         return self._genericIter(rows, seq_name)
+
+
+##############################################################################
+# Genome wide convolution of a sequence over non-gene regions
+def gwConvolve(genome, seq):
+    seq_hits = 0
+    for chrom in genome.seq_names:
+        if chrom == 'chrM': continue # ignore mitochondria
+        num = len(list(genome.nongeneIter(chrom)))
+        for bp_seq, record in genome.nongeneIter(chrom):
+            score_deque = deque()
+            max_score = convolveSubsequence(seq, bp_seq, score_deque)
+            while score_deque:
+                seq_hits += 1
+                pos,score = score_deque.pop()
+    return seq_hits, seq
+
+##############################################################################
+# Genome wide convolution of a sequence over non-gene regions that tracks scores
+def gwConvolveTrack(genome, seq):
+    seq_hits = 0
+    X = {}
+    Y = {}
+    P = {}
+    for chrom in genome.seq_names:
+        if chrom == 'chrM': continue # ignore mitochondria
+        X[chrom] = [0.0]
+        Y[chrom] = [0.0]
+        P[chrom] = []
+        num = len(list(genome.nongeneIter(chrom)))
+        for bp_seq, record in genome.nongeneIter(chrom):
+            score_deque = deque()
+            max_score = convolveSubsequence(seq, bp_seq, score_deque)
+            while score_deque:
+                seq_hits += 1
+                pos,score = score_deque.pop()
+                pos += record.start # locate on chromasome
+                X[chrom].extend((pos,pos,pos))
+                Y[chrom].extend((0.0,1.2,0.0))
+                P[chrom].append(pos)
+    return X,Y,P
+
+##############################################################################
+# Returns X and Y coordinates that draw out the gene regions in 'chrom'
+def geneGraph(genome, chrom):
+    X = [0.0]
+    Y = [0.0]
+    for bp_seq, record in genome.txIter(chrom):
+        X.extend((record.start, record.start, record.end, record.end))
+        Y.extend((0.0, 1.0, 1.0, 0.0))
+    return X, Y
+
+##############################################################################
+# Runs a random BP sequence over all non-gene regions of 'genome'
+def runGuess(genome, num_bp):
+    #guess = np.random.random_integers(0,3,10).astype(np.uint8)
+    rand = random.SystemRandom()
+    guess = np.array([rand.randint(0,3) for i in range(num_bp)], dtype=np.uint8)
+    return gwConvolve(genome, guess)
 
 if __name__ == '__main__':
     import sys
@@ -296,9 +367,6 @@ if __name__ == '__main__':
         i3 = TTA[(seq[idx+6] << 4) + (seq[idx+7] << 2) + (seq[idx+8] << 0)]
         chrI_gene_guess[idx/3] = counts[i1,i2,i3]
     chrI_gene_guess /= max(chrI_gene_guess)
-    '''
 
-    
-                                                           
-                                                           
-    
+    '''
+  
