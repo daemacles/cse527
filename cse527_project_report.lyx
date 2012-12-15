@@ -74,7 +74,7 @@ CSE527 Au12 Project Report -- A Genome Wide Motif Search
 \end_layout
 
 \begin_layout Author
-James Youngquist
+James Youngquist <jay@cs.uw.edu>
 \end_layout
 
 \begin_layout Section
@@ -86,29 +86,29 @@ This report describes a method for searching an entire genome for motifs.
  While I limited my searches to nucleotide motifs on DNA regions outside
  of genes, there is nothing in principle that prevents this method from
  being used for codon searches within genes.
- However, unless specified otherwise, all references to searching, motifs,
- etc.
+ However, unless specified otherwise, all further references to searching,
+ motifs, etc.
  refer to nucleotide motifs on non-gene regions.
- 
+ The technique described here was independently developed and the author
+ is not aware of it being used elsewhere.
 \end_layout
 
 \begin_layout Standard
 Motifs are repeating sequences that are found throughout a genome and which
  may have biological significance in their own right.
  For example, the TATA box is a motif found in the promoter regions of some
- genes that acts as a binding site for transcription factors (TF) [* http://www.n
-cbi.nlm.nih.gov/pmc/articles/PMC1955227/].
+ genes that acts as a binding site for transcription factors (TF) [1].
  Because TF binding sites can be bound by both gene promoters and suppressors,
  if one can discover a TF motif, then that gives some information about
- which genes are related.
- That is, two genes which share a TF motif will both be influenced in similar
- ways.
+ the relationships between genes.
+ That is, two genes which share a TF motif will both be tend to be expressed
+ or inhibited in similar ways.
 \end_layout
 
 \begin_layout Standard
 Specifically, I chose to explore the Saccharomyces cerevisiae genome 
 \begin_inset Foot
-status open
+status collapsed
 
 \begin_layout Plain Layout
 as downloaded from http://hgdownload.cse.ucsc.edu/goldenPath/sacCer3/bigZips/
@@ -116,13 +116,13 @@ as downloaded from http://hgdownload.cse.ucsc.edu/goldenPath/sacCer3/bigZips/
 
 \end_inset
 
- because 1) it is fully sequenced, 2) it is annotated with gene locations,
+ [2] because 1) it is fully sequenced, 2) it is annotated with gene locations,
  and 3) it is small enough for my limited computing resources to analyze.
  S.
- cerevisiae has about 6000 genes across 16 nuclear chromasomes and slightly
- over 12 million basepairs in total.
+ cerevisiae has about 6000 genes across 16 nuclear chromosomes, and slightly
+ over 12 million base pairs in total.
  Of the 12 million base pairs, roughly 27% are outside known or suspected
- genes, according to the UCSC genome annotations database.
+ genes coding regions, according to the UCSC genome annotations database.
 \end_layout
 
 \begin_layout Standard
@@ -160,14 +160,23 @@ Prior Work
 \begin_layout Standard
 The idea of computationally searching for motifs is not new.
  One technique is to use expectation maximization (EM) to find sequences
- that are highl y likely to be motifs.
+ that are highly likely to be motifs [3].
  The EM method is not typically used for searches across an entire genome,
  but for a selected set of sequences.
  There are also databases of known motifs such as TRANSFAC (http://www.gene-
  regulation.com/pub/databases.html, limited free functionality) and JASPAR
  (http://jaspar.genereg.net/).
- The wikipedia page for 'Sequence Motif' has an extensive list of software
- and databases related to motif finding.
+ The Wikipedia page for 'Sequence Motif'
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+http://en.wikipedia.org/wiki/Sequence_motif
+\end_layout
+
+\end_inset
+
+ has an extensive list of software and databases related to motif finding.
 \end_layout
 
 \begin_layout Section
@@ -204,15 +213,17 @@ Convolution here means the sum of matching nucleotides between some test
 \begin_inset Formula $<1,-1,-3>$
 \end_inset
 
- (I discard positions without complete overlap).
- Thus, for 10-mers in the case of S.
- cerevisiae, 
+.
+ Unlike the traditional meaning convolution, I discard positions without
+ complete overlap.
+ Thus, for complete coverage of 10-mers in the case of S.
+ cerevisiae, approximately 
 \begin_inset Formula $4^{10}\cdot3.3\times10^{6}=$
 \end_inset
 
-3.3 trillion comparisons would have to be made.
+ 3.3 trillion comparisons would have to be made.
  This does not account for gaps, additions, elisions or other small variations
- in the test sequences.
+ in the motif.
  This is a combinatorial problem and so clearly 
 \emph on
 the naive method is not scalable
@@ -222,18 +233,18 @@ the naive method is not scalable
 
 \begin_layout Standard
 A key observation is that motifs can be represented by varying base sequences
- that fulfil the same biological function.
+ that fulfill the same biological function.
  That is, small changes in chemistry (e.g.
- base pair substitution) do not radically effect the purpose of a given
+ base pair substitution) may not radically effect the purpose of a given
  motif.
  Hence the naive approach also fails in that it would consider 
 \noun on
 TATATT
 \noun default
 CAAATG, TATATTGAAATG and TATATTCAAA* to be different motifs even though
- they very likely represent the same one, though the last is in fact shorter
- by one base pair.
- My solution to this dual problem with the naive approach is to use a modified
+ they very likely represent the same one, though the first two differ in
+ the 7th letter and the last is shorter by one base pair.
+ My solution to this dual problem of the naive approach is to use a modified
  Needleman-Wunsch (mNW) algorithm, where no backtracking is done, instead
  of plain convolution.
  Further, I only use a randomly selected subset of all possible N-mers.
@@ -246,8 +257,8 @@ good
 \end_inset
 
  via simple thresholding on the final score: a score of 9 or 10 was accepted
- for 10-mers under test, which allows for some wiggle-room in terms of closeness
- and nucleotide variance among the same motif.
+ for the 10-mers under test, which allows for some wiggle-room in terms
+ of closeness and nucleotide variance among the same motif.
 \end_layout
 
 \begin_layout Standard
@@ -266,11 +277,11 @@ One of the main benefits of this approach, unlike the EM algorithm for motif
  finding, is that it is trivially parallelized.
  Testing each random guess is independent of all other guesses.
  Thus, each mNW sweep through the non gene regions can be done separately
- in its own process across networked machines and all results accumulated
+ in its own process across networked machines and all results are accumulated
  by another process.
- For this project I had access to about 28 logical cores (14 without hyperthread
-ing).
- Speed is linear in the number of processing cores available.
+ For this project I had access to about 28 logical cores (14 without hyper-threa
+ding).
+ Search speed is linear in the number of processing cores available.
 \end_layout
 
 \begin_layout Section
@@ -304,7 +315,7 @@ reference "fig:Graph-of-top"
 
 \end_inset
 
- for the top 30 scoring sequences I found.
+ for the top 30 scoring sequences that were found.
  The top 10 sequences are visualized in Figure 
 \begin_inset CommandInset ref
 LatexCommand ref
@@ -312,14 +323,14 @@ reference "fig:Visualization-of-top"
 
 \end_inset
 
- with a small zoomed in section shown in Figure 
+ with a zoomed in section shown in Figure 
 \begin_inset CommandInset ref
 LatexCommand ref
 reference "fig:Zoomed-in-section"
 
 \end_inset
 
-.
+ for example detail.
 \end_layout
 
 \begin_layout Standard
@@ -1724,8 +1735,8 @@ reference "fig:Visualization-of-top"
 Most of the top scoring sequences are composed primarily of T and A bases.
  Since in the bond between A and T is weaker than that between G and C,
  this lends evidence for biologically significance.
- A prevalence of AT bonds is common at locations where the DNA strand must
- be unwound and separated, e.g.
+ A prevalence of A--T bonds is common at locations where the DNA strand
+ must be unwound and separated, e.g.
  the commonly known TATA box.
  For example, the top scoring sequence, 
 \family roman
@@ -1744,22 +1755,22 @@ TACTTTTTTT/AAAAAAAGTA was frequently located very close to an adjacent gene,
 \end_layout
 
 \begin_layout Standard
-However, I was unable to find these sequences after a search on TRANSFAC
- and JASPER as being known TF motifs for S.
+However, I was unable to find these particular sequences in the TRANSFAC
+ or JASPER databases as being known TF motifs for S.
  cerevisiae .
- Unfortunately TRANSFAC's public academic database is 7 years out of date,
- whereas the yeast data I analyzed is from April, 2011.
+ Unfortunately TRANSFAC's public academic database is 7 years old, whereas
+ the yeast data I analyzed is from April, 2011.
  However, I did find the TRANSFAC interface to be confusing and it is quite
- possible that, lacking the appropriate biology background, I just searched
- incorrectly.
+ possible that, lacking the appropriate biology background, I searched incorrect
+ly.
 \end_layout
 
 \begin_layout Standard
 The numerical distribution of results is quite interesting.
- It appears that only a few sequences are highly prevalent, that is the
+ It appears that only a few sequences are highly prevalent, that is, the
  distribution of hits has a long tail and narrow peak.
- This would imply that more sequences could be searched because guessing
- the few highest scoring sequences is not likely.
+ This would imply that more sequences should be searched because guessing
+ the few highest scoring sequences is less likely.
  Likewise, many 
 \begin_inset Quotes eld
 \end_inset
@@ -1771,14 +1782,14 @@ true
  motifs could be lost in the noise of the long tail.
  Thus, this technique is not well suited for directly discovering motifs
  shared by only a few genes.
- However, this method could be useful as a filter, highlighting promising
+ However, this method could be useful as a filter: highlighting promising
  sequences for more in depth analysis or further experimentation.
 \end_layout
 
 \begin_layout Standard
-Also of note is that that though the motifs I found do not show any visable
+Also of note is that that though the motifs I found do not show any visible
  bias among chromosomes, they do fall non-uniformly on each chromosome.
- There are, for example, both clumps of each sequence and also regions where
+ There are, for example, both clumps of each motif and also regions where
  they are sparsely found.
 \end_layout
 
@@ -1800,10 +1811,10 @@ Much thought went into a software design that would scale well and work
  that could handle human genome size datasets with little or no modification.
  Another design goal was an intuitive API that could be used by others with
  little training.
- Python was chosen as the implementation langauge for its ease of use and
+ Python was chosen as the implementation language for its ease of use and
  simultaneous ability for high numeric performance through the NumPy
 \begin_inset Foot
-status open
+status collapsed
 
 \begin_layout Plain Layout
 http://numpy.scipy.org/
@@ -1829,20 +1840,21 @@ http://www.cython.org/
 For the first goal, I make heavy use of memory mapping through NumPy array
  primitives.
  Memory mapping allows one to treat a file on the disk as the backing store
- for virtual memory and NumPy has direct support for keeping an arrays data
+ for virtual memory and NumPy has direct support for keeping array data
  in a memory mapped region.
- Sequence data is represented as a byte array where T=0, C=1, A=2 and G=3.
- Apart from the time required to convert the .2bit format provided by genome.ucsc.e
-du, program startup is almost instantaneous and the OS handles swaping genome
- pages in and out of memory as needed.
- In this way even the human genome can be efficiently analyzed as the no
- explicit user memory management is required.
+ Sequence data is represented internally as a byte array where T=0, C=1,
+ A=2 and G=3.
+ Apart from the one time required to convert the compressed .2bit format
+ provided by genome.ucsc.edu (see below), program startup is almost instantaneous
+ and the OS handles swapping genome pages in and out of memory as needed.
+ In this way even the human genome can be efficiently analyzed as no explicit
+ user memory management is required.
  Further, apart from the randomly generated test sequences, all subsequences
  (represented as NumPy arrays) used in my program are 'views' of the main
- genome array, NumPy parlance for pointers to offsets.
+ genome array; 'view' is NumPy parlance for pointers to offsets.
  Therefor memory overhead is minimized and speed is increased by avoiding
- the need for python to allocate and copy memory for millions of temporary
- objects that get used once.
+ the need for Python to allocate and copy memory for millions of temporary
+ objects that get used only once.
  Finally, a proper OS implementation of shared (memmapped) memory shares
  that memory between separate processes so that multiple processes referencing
  the same memmapped file on disk do not actually use more memory than a
@@ -1857,7 +1869,7 @@ However, even with memory mapping tricks, Python is notoriously slow for
  A pure Python implementation is over 100 times slower than the equivalent
  C implementation due to Python's dynamic typing.
  At every iteration of a loop, code must be needlessly run that repeatedly
- checks the types of all variables being referenced.
+ checks the types of all variables being referenced [4].
  Luckily, an extension to Python call Cython has been written.
  Cython allows Python functions to be written that include type information,
  a trivial modification over the original Python code.
@@ -1865,11 +1877,11 @@ However, even with memory mapping tricks, Python is notoriously slow for
  is then compiled by GCC into a native Python extension.
  In the case of the Needleman-Wunsch algorithm I saw a speedup of 100x using
  Cython over pure Python.
- Cython was used here any time I had a tight inner loop or was doing low
+ Cython was utilized any time I had a tight inner loop or was doing low
  level manipulation of the data arrays.
- It was the main reason that Python was suitable for this project, which
- allowed it to be completed in much less time than had I chosen to use only
- C or C++.
+ It was the main reason that Python was suitable for this project, and allowed
+ it to be completed in much less time than had I chosen to use only C or
+ C++.
 \end_layout
 
 \begin_layout Standard
@@ -1881,17 +1893,47 @@ In the course of developing the motif searching code, I first needed to
  as a brief description of that gene.
  The .2bit format is a compressed binary format where each file can contain
  multiple sequences and each sequence has associated metadata.
- The actual genetic code is stored four base pairs to a byte using the same
- code as described above (T=0, ...).
+ The actual genetic code in the .2bit format is stored as four base pairs
+ per byte using the same code as described above (T=0, ...).
  The metadata includes a sequence name, e.g.
  'chrI' for chromosome I, and any masking regions in the genome, i.e.
  places with incomplete data.
- I created a Python class, Genome, to wrap around both the annotation (importing
- it into a Sqlite3 database) information and to decode and cache the .2bit
- information.
+ I created a Python class, Genome, as a wrapper for both the annotation
+ information (importing it into a Sqlite3 database) and to decode and cache
+ the .2bit information.
  With an instance of the Genome class, it is easy to do tasks such as iterate
  over all known gene (or non-gene) sequences in the genome or query for
  other such related information.
+\end_layout
+
+\begin_layout Standard
+Parallelizing this motif finding algorithm was trivial.
+ A simple worker program was developed that repeatedly generated a random
+ sequence of the desired length and forwarded the number of hits that sequence
+ acquired across the non gene regions over the network to an accumulation
+ process.
+ After it had acquired enough data, the accumulation process commanded all
+ worker processes to halt.
+ As many worker processes can be started as cores that one has available,
+ and adding machines to the computational cluster is as easy as adding their
+ IP address and number of processes to a list.
+ The ZeroMQ
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+available from http://www.zeromq.org/
+\end_layout
+
+\end_inset
+
+ library was used for all network communication as it has a very nice high
+ level interface well suited for exactly this kind of thing [5].
+\end_layout
+
+\begin_layout Standard
+The code for this project has been made available at https://github.com/daemacles
+/cse527 .
 \end_layout
 
 \begin_layout Section
@@ -1921,7 +1963,7 @@ There are several correlation analyses which would be interesting to perform.
 
 \begin_layout Itemize
 The correlation between motifs and gene sense -- are some motifs most often
- associated with forward or reverse coded genes? Is there no bias?
+ associated with forward or reverse coded genes? Or, is there no bias?
 \end_layout
 
 \begin_layout Itemize
@@ -1938,19 +1980,21 @@ What is the correlation between top scoring motifs and other low scoring
 \end_layout
 
 \begin_layout Standard
-I'm also curious about improving the computational side of this method,
- namely, increasing performance and accuracy.
- It would be interesting to see if it could be adapted to a GPU to take
- advantage the high parallelism available there.
- Another promising idea is to adapt this technique to use some sort of multigrid
- method.
- Every motif of length N that is found also contains a motif of length N-1
- that would have been found from a search of lengths N-1.
- Therefor, one could start with shorter search lenghts, e.g.
+I'm also curious about improving the computational aspects of this method,
+ namely, to increase performance and accuracy.
+ It would be interesting to see if it could be adapted to take advantage
+ a GPU's high parallelism.
+ Another promising idea is to adapt this technique to use some sort of multi-gri
+d method.
+ The intuition is that every motif of length N which is found also contains
+ a motif of length N-1 that would have been found from a search of lengths
+ N-1.
+ Therefor, one could start with shorter search length, e.g.
  6--8, and use the top matches from that length as seed for the next higher
  length.
- This would significantly reduce the search space for longer motifs whose
- permutations grow combinatorially.
+ This could significantly reduce the search space for longer motifs whose
+ permutations grow combinatorially, yet at the expense of ignoring motifs
+ that affect only a few genes.
 \end_layout
 
 \begin_layout Section
@@ -1959,10 +2003,11 @@ Conclusion
 
 \begin_layout Standard
 Convolution with the modified Needleman-Wunsch algorithm generated several
- interesting motifs with strong evidence for biological significance among
- the highest scoring.
- This method of motif discovery is promising, but has much room for improvement
- and optimization as currently implemented.
+ interesting motifs in the non-gene regions of the S.
+ cerevisiae genome.
+ The highest score of these had strong evidence for biological significance.
+ This method of motif discovery is promising, but as currently implemented
+ it has much room for improvement and optimization.
  It is not suitable for all types of motif discovery or analysis, but could
  be useful for highlighting motifs for further study or to be run on newly
  sequenced genomes as a first line of analysis.
@@ -1970,6 +2015,61 @@ Convolution with the modified Needleman-Wunsch algorithm generated several
 
 \begin_layout Section
 References
+\end_layout
+
+\begin_layout Enumerate
+Yang C, Bolotin E, Jiang T, Sladek FM, Martinez E.
+ 
+\emph on
+Prevalence of the initiator over the TATA box in human and yeast genes and
+ identification of DNA motifs enriched in human TATA-less core promoters
+\emph default
+.
+ Gene.
+ 2007;389:52–65.
+\end_layout
+
+\begin_layout Enumerate
+Meyer LR, Zweig AS, Hinrichs AS, Karolchik D, Kuhn RM, Wong M, Sloan CA,
+ Rosenbloom KR, Roe G, Rhead B, Raney BJ, Pohl A, Malladi VS, Li CH, Lee
+ BT, Learned K, Kirkup V, Hsu F, Heitner S, Harte RA, Haeussler M, Guruvadoo
+ L, Goldman M, Giardine BM, Fujita PA, Dreszer TR, Diekhans M, Cline MS,
+ Clawson H, Barber GP, Haussler D, and Kent WJ.
+ 
+\emph on
+The UCSC Genome Browser database: extensions and updates 2013
+\emph default
+.
+ Nucleic Acids Res.
+ 2012 Nov 15.
+ [Epub ahead of print]
+\end_layout
+
+\begin_layout Enumerate
+CSE527 Lecture by Su-in Lee and associated lecture notes.
+ University of Washington, 2012.
+\end_layout
+
+\begin_layout Enumerate
+Seljebotn D., Salvatier J.
+ 
+\emph on
+Cython for NumPy users
+\emph default
+.
+ Retrieved Dec 2012 from http://wiki.cython.org/tutorials/numpy.
+\end_layout
+
+\begin_layout Enumerate
+Brian.
+ From the Blog Tao te Tek.
+ 
+\emph on
+Python Multiprocessing with ZeroMQ
+\emph default
+.
+ Retrieved Dec 2012 from http://taotetek.wordpress.com/2011/02/02/python-multiproc
+essing-with-zeromq/.
 \end_layout
 
 \end_body
