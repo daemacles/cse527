@@ -52,14 +52,16 @@ def accumulator(iterations, num_guesses):
 
     context = zmq.Context()
     
-    accumulator = context.socket(zmq.PULL)
-    accumulator.bind("tcp://*:" + accum_port)
+    accum = context.socket(zmq.PULL)
+    accum.bind("tcp://*:" + accum_port)
 
     controller = context.socket(zmq.PUB)
     controller.bind("tcp://*:" + control_port)
 
     step = iterations / 40.0
     next_level = step
+    print 'Accumulator Starting'
+    print 'Iterations: %d,  Saving top %d guesses.'%(iterations, num_guesses)
     print 'Progress [ 0                                    ] %d'%iterations
     print '         ',
     for task_num in range(iterations):
@@ -67,7 +69,7 @@ def accumulator(iterations, num_guesses):
             sys.stdout.write('^')
             sys.stdout.flush()
             next_level += step
-        ans_dict = accumulator.recv_json()
+        ans_dict = accum.recv_json()
         guess = np.fromstring(base64.b64decode(ans_dict['guess']),
                               dtype=np.uint8)
         insertGuess(best_guesses, (ans_dict['guess_hits'], uid, guess))
@@ -75,7 +77,7 @@ def accumulator(iterations, num_guesses):
     print
         
     controller.send('STOP')
-    accumulator.close()
+    accum.close()
 
     return best_guesses
 
@@ -108,6 +110,7 @@ if __name__ == '__main__':
             num_bp = int(sys.argv[3])
             workers = [Process(target=worker, args=(num_bp,))
                        for work_num in range(num_workers)]
+            print workers
             for worker in workers: worker.start()
 
         elif sys.argv[1] == 's':

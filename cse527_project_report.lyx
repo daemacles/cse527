@@ -2,8 +2,13 @@
 \lyxformat 413
 \begin_document
 \begin_header
-\textclass article
+\textclass scrartcl
 \use_default_options true
+\begin_modules
+theorems-ams
+eqs-within-sections
+figs-within-sections
+\end_modules
 \maintain_unincluded_children false
 \language english
 \language_package default
@@ -25,9 +30,10 @@
 \bibtex_command default
 \index_command default
 \paperfontsize default
+\spacing single
 \use_hyperref false
 \papersize default
-\use_geometry false
+\use_geometry true
 \use_amsmath 1
 \use_esint 1
 \use_mhchem 1
@@ -42,13 +48,17 @@
 \shortcut idx
 \color #008000
 \end_index
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
 \secnumdepth 3
 \tocdepth 3
 \paragraph_separation indent
 \paragraph_indentation default
 \quotes_language english
 \papercolumns 1
-\papersides 1
+\papersides 2
 \paperpagestyle default
 \tracking_changes false
 \output_changes false
@@ -60,7 +70,7 @@
 \begin_body
 
 \begin_layout Title
-CSE527 Au12 Project Report
+CSE527 Au12 Project Report -- A Genome Wide Motif Search
 \end_layout
 
 \begin_layout Author
@@ -72,7 +82,75 @@ Introduction
 \end_layout
 
 \begin_layout Standard
-stuff
+This report describes a method for searching an entire genome for motifs.
+ While I limited my searches to nucleotide motifs on DNA regions outside
+ of genes, there is nothing in principle that prevents this method from
+ being used for codon searches within genes.
+ However, unless specified otherwise, all references to searching, motifs,
+ etc.
+ refer to nucleotide motifs on non-gene regions.
+ 
+\end_layout
+
+\begin_layout Standard
+Motifs are repeating sequences that are found throughout a genome and which
+ may have biological significance in their own right.
+ For example, the TATA box is a motif found in the promoter regions of some
+ genes that acts as a binding site for transcription factors (TF) [* http://www.n
+cbi.nlm.nih.gov/pmc/articles/PMC1955227/].
+ Because TF binding sites can be bound by both gene promoters and suppressors,
+ if one can discover a TF motif, then that gives some information about
+ which genes are related.
+ That is, two genes which share a TF motif will both be influenced in similar
+ ways.
+\end_layout
+
+\begin_layout Standard
+Specifically, I chose to explore the Saccharomyces cerevisiae genome 
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+as downloaded from http://hgdownload.cse.ucsc.edu/goldenPath/sacCer3/bigZips/
+\end_layout
+
+\end_inset
+
+ because 1) it is fully sequenced, 2) it is annotated with gene locations,
+ and 3) it is small enough for my limited computing resources to analyze.
+ S.
+ cerevisiae has about 6000 genes across 16 nuclear chromasomes and slightly
+ over 12 million basepairs in total.
+ Of the 12 million base pairs, roughly 27% are outside known or suspected
+ genes, according to the UCSC genome annotations database.
+\end_layout
+
+\begin_layout Standard
+There are three main portions to this report.
+ They are, in order, the method I used (section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Method"
+
+\end_inset
+
+), results and discussion (section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Results"
+
+\end_inset
+
+), and finally the tools and and techniques I developed to support my method
+ (section 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Tools-and-Techniques"
+
+\end_inset
+
+).
+ I close with thoughts about future work.
 \end_layout
 
 \begin_layout Section
@@ -80,47 +158,1814 @@ Prior Work
 \end_layout
 
 \begin_layout Standard
-not much stuff
+The idea of computationally searching for motifs is not new.
+ One technique is to use expectation maximization (EM) to find sequences
+ that are highl y likely to be motifs.
+ The EM method is not typically used for searches across an entire genome,
+ but for a selected set of sequences.
+ There are also databases of known motifs such as TRANSFAC (http://www.gene-
+ regulation.com/pub/databases.html, limited free functionality) and JASPAR
+ (http://jaspar.genereg.net/).
+ The wikipedia page for 'Sequence Motif' has an extensive list of software
+ and databases related to motif finding.
 \end_layout
 
 \begin_layout Section
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Method"
+
+\end_inset
+
 Method
 \end_layout
 
 \begin_layout Standard
-stuff
-\end_layout
-
-\begin_layout Section
-Results
-\end_layout
-
-\begin_layout Standard
-stuff
-\end_layout
-
-\begin_layout Section
-Discussion
+So we want to find which TF motifs are most prevalent on the S.
+ cerevisiae genome.
+ The naive approach is, for each length of motif desired, to convolve all
+ possible combinations of that length along the non gene coding regions
+ of some organism's genome.
+ A sequence of length N is considered a match at some position along the
+ genome if its convolution score there is sufficiently high.
+ Then, one simply records which test sequences result in the most 'hits'
+ along the genome.
 \end_layout
 
 \begin_layout Standard
-stuff
+Convolution here means the sum of matching nucleotides between some test
+ sequence and a position on the genome, where mismatches have a weight of
+ -1.
+ For example, the convolution of AAAA and AAAG has a score of 
+\begin_inset Formula $+3-1=2$
+\end_inset
+
+, and AAA convolved along AAGTC results in the sequence of scores 
+\begin_inset Formula $<1,-1,-3>$
+\end_inset
+
+ (I discard positions without complete overlap).
+ Thus, for 10-mers in the case of S.
+ cerevisiae, 
+\begin_inset Formula $4^{10}\cdot3.3\times10^{6}=$
+\end_inset
+
+3.3 trillion comparisons would have to be made.
+ This does not account for gaps, additions, elisions or other small variations
+ in the test sequences.
+ This is a combinatorial problem and so clearly 
+\emph on
+the naive method is not scalable
+\emph default
+ above a small number of base pairs.
+\end_layout
+
+\begin_layout Standard
+A key observation is that motifs can be represented by varying base sequences
+ that fulfil the same biological function.
+ That is, small changes in chemistry (e.g.
+ base pair substitution) do not radically effect the purpose of a given
+ motif.
+ Hence the naive approach also fails in that it would consider 
+\noun on
+TATATT
+\noun default
+CAAATG, TATATTGAAATG and TATATTCAAA* to be different motifs even though
+ they very likely represent the same one, though the last is in fact shorter
+ by one base pair.
+ My solution to this dual problem with the naive approach is to use a modified
+ Needleman-Wunsch (mNW) algorithm, where no backtracking is done, instead
+ of plain convolution.
+ Further, I only use a randomly selected subset of all possible N-mers.
+ I accept a sequence as 
+\begin_inset Quotes eld
+\end_inset
+
+good
+\begin_inset Quotes erd
+\end_inset
+
+ via simple thresholding on the final score: a score of 9 or 10 was accepted
+ for 10-mers under test, which allows for some wiggle-room in terms of closeness
+ and nucleotide variance among the same motif.
+\end_layout
+
+\begin_layout Standard
+This is a probabilistic approximation approach.
+ It is (hopefully) biologically sound because a large enough subset of test
+ sequences with an appropriate threshold covers a significant portion of
+ possible matches.
+ Even though the mNW algorithm is quadratic instead of linear in the test
+ sequence size, I do not have to test all sequences and also get positive
+ results for sequences that match against motifs of length 9 and 11 as well
+ as 10.
+\end_layout
+
+\begin_layout Standard
+One of the main benefits of this approach, unlike the EM algorithm for motif
+ finding, is that it is trivially parallelized.
+ Testing each random guess is independent of all other guesses.
+ Thus, each mNW sweep through the non gene regions can be done separately
+ in its own process across networked machines and all results accumulated
+ by another process.
+ For this project I had access to about 28 logical cores (14 without hyperthread
+ing).
+ Speed is linear in the number of processing cores available.
 \end_layout
 
 \begin_layout Section
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Results"
+
+\end_inset
+
+Results and Discussion
+\end_layout
+
+\begin_layout Standard
+My results come from 20,000 randomly generated test sequences of length
+ 10.
+ At face value, 20,000 sequences only covers 2% of all length 10 sequences,
+ but as mentioned above my algorithm accounts for motifs that vary slightly
+ in their composition and so I believe this is sufficient to capture high
+ scoring motifs.
+ See Table 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Top-30-results"
+
+\end_inset
+
+ and Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:Graph-of-top"
+
+\end_inset
+
+ for the top 30 scoring sequences I found.
+ The top 10 sequences are visualized in Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:Visualization-of-top"
+
+\end_inset
+
+ with a small zoomed in section shown in Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:Zoomed-in-section"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float table
+wide true
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Tabular
+<lyxtabular version="3" rows="31" columns="3">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top" width="0">
+<column alignment="center" valignment="top" width="0">
+<column alignment="center" valignment="top" width="0">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+Number
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+Forward Strand
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+Reverse Strand
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+689
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TACTTTTTTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAAAAAAGTA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+496
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAGAAAAATT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AATTTTTCTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+335
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATATACATTA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TAATGTATAT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+293
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAAAATTCTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAGAATTTTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+227
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATAAAGGAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTCCTTTAT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+200
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAAACAATTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAATTGTTTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+196
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+GAAAAGCAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTGCTTTTC
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+189
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTCAATTATT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AATAATTGAA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+174
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TGTAAGAAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTTCTTACA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+170
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAACGTAAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTTACGTTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+167
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TGTAAAATTA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TAATTTTACA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+165
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CTTATTTTTG
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CAAAAATAAG
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+163
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATTATCCTTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAAGGATAAT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+154
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAAAACATCA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TGATGTTTTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+153
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+GGAGAAAAAT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATTTTTCTCC
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+143
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TAATCGTAAT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATTACGATTA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+143
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AGTAAATGAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTCATTTACT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+141
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAATGATGTA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TACATCATTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+138
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AACTTTGAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTCAAAGTT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+133
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TGGGATTCCA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TGGAATCCCA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+112
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AATTTTCACC
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+GGTGAAAATT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+111
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ACAGAAACAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTGTTTCTGT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+109
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTCTTATGTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AACATAAGAA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+106
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATTCATTGTC
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+GACAATGAAT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+106
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTCTAATTC
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+GAATTAGAAA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+105
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CATATCATAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTATGATATG
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+104
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTCATTATTG
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CAATAATGAA
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+102
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+ATAGAGGAAA
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+TTTCCTCTAT
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+100
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CGGAAAAAAG
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CTTTTTTCCG
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+100
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+CTCCTTTCTT
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+AAGAAAGGAG
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "tab:Top-30-results"
+
+\end_inset
+
+Top 30 results
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename top30chart.eps
+	lyxscale 50
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:Graph-of-top"
+
+\end_inset
+
+Graph of top 30 scoring sequences
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename graph1.eps
+	lyxscale 30
+	width 9in
+	scaleBeforeRotation
+	rotateAngle 90
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:Visualization-of-top"
+
+\end_inset
+
+Visualization of top 10 scoring sequences.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename graph1-zoom.eps
+	lyxscale 30
+	width 9in
+	scaleBeforeRotation
+	rotateAngle 90
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:Zoomed-in-section"
+
+\end_inset
+
+Zoomed in section of Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "fig:Visualization-of-top"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Most of the top scoring sequences are composed primarily of T and A bases.
+ Since in the bond between A and T is weaker than that between G and C,
+ this lends evidence for biologically significance.
+ A prevalence of AT bonds is common at locations where the DNA strand must
+ be unwound and separated, e.g.
+ the commonly known TATA box.
+ For example, the top scoring sequence, 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\uuline off
+\uwave off
+\noun off
+\color none
+TACTTTTTTT/AAAAAAAGTA was frequently located very close to an adjacent gene,
+ even when there was a large gap between the genes.
+\end_layout
+
+\begin_layout Standard
+However, I was unable to find these sequences after a search on TRANSFAC
+ and JASPER as being known TF motifs for S.
+ cerevisiae .
+ Unfortunately TRANSFAC's public academic database is 7 years out of date,
+ whereas the yeast data I analyzed is from April, 2011.
+ However, I did find the TRANSFAC interface to be confusing and it is quite
+ possible that, lacking the appropriate biology background, I just searched
+ incorrectly.
+\end_layout
+
+\begin_layout Standard
+The numerical distribution of results is quite interesting.
+ It appears that only a few sequences are highly prevalent, that is the
+ distribution of hits has a long tail and narrow peak.
+ This would imply that more sequences could be searched because guessing
+ the few highest scoring sequences is not likely.
+ Likewise, many 
+\begin_inset Quotes eld
+\end_inset
+
+true
+\begin_inset Quotes erd
+\end_inset
+
+ motifs could be lost in the noise of the long tail.
+ Thus, this technique is not well suited for directly discovering motifs
+ shared by only a few genes.
+ However, this method could be useful as a filter, highlighting promising
+ sequences for more in depth analysis or further experimentation.
+\end_layout
+
+\begin_layout Standard
+Also of note is that that though the motifs I found do not show any visable
+ bias among chromosomes, they do fall non-uniformly on each chromosome.
+ There are, for example, both clumps of each sequence and also regions where
+ they are sparsely found.
+\end_layout
+
+\begin_layout Section
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Tools-and-Techniques"
+
+\end_inset
+
 Tools and Techniques
 \end_layout
 
 \begin_layout Standard
-lotsa stuff
+Much thought went into a software design that would scale well and work
+ with large datasets.
+ Though the S.
+ cerevisiae genome is only about 12 million base pairs, I wanted a system
+ that could handle human genome size datasets with little or no modification.
+ Another design goal was an intuitive API that could be used by others with
+ little training.
+ Python was chosen as the implementation langauge for its ease of use and
+ simultaneous ability for high numeric performance through the NumPy
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+http://numpy.scipy.org/
+\end_layout
+
+\end_inset
+
+ and Cython
+\begin_inset Foot
+status collapsed
+
+\begin_layout Plain Layout
+http://www.cython.org/
+\end_layout
+
+\end_inset
+
+ extensions.
+ In all, about 1000 lines of Python code were written.
+\end_layout
+
+\begin_layout Standard
+For the first goal, I make heavy use of memory mapping through NumPy array
+ primitives.
+ Memory mapping allows one to treat a file on the disk as the backing store
+ for virtual memory and NumPy has direct support for keeping an arrays data
+ in a memory mapped region.
+ Sequence data is represented as a byte array where T=0, C=1, A=2 and G=3.
+ Apart from the time required to convert the .2bit format provided by genome.ucsc.e
+du, program startup is almost instantaneous and the OS handles swaping genome
+ pages in and out of memory as needed.
+ In this way even the human genome can be efficiently analyzed as the no
+ explicit user memory management is required.
+ Further, apart from the randomly generated test sequences, all subsequences
+ (represented as NumPy arrays) used in my program are 'views' of the main
+ genome array, NumPy parlance for pointers to offsets.
+ Therefor memory overhead is minimized and speed is increased by avoiding
+ the need for python to allocate and copy memory for millions of temporary
+ objects that get used once.
+ Finally, a proper OS implementation of shared (memmapped) memory shares
+ that memory between separate processes so that multiple processes referencing
+ the same memmapped file on disk do not actually use more memory than a
+ single process.
+\end_layout
+
+\begin_layout Standard
+However, even with memory mapping tricks, Python is notoriously slow for
+ program flow control.
+ For example, the Needleman-Wunsch algorithm is quadratic in the size of
+ its input -- a double 'for' loop.
+ A pure Python implementation is over 100 times slower than the equivalent
+ C implementation due to Python's dynamic typing.
+ At every iteration of a loop, code must be needlessly run that repeatedly
+ checks the types of all variables being referenced.
+ Luckily, an extension to Python call Cython has been written.
+ Cython allows Python functions to be written that include type information,
+ a trivial modification over the original Python code.
+ Cython then compiles this modified Python code into optimized C, which
+ is then compiled by GCC into a native Python extension.
+ In the case of the Needleman-Wunsch algorithm I saw a speedup of 100x using
+ Cython over pure Python.
+ Cython was used here any time I had a tight inner loop or was doing low
+ level manipulation of the data arrays.
+ It was the main reason that Python was suitable for this project, which
+ allowed it to be completed in much less time than had I chosen to use only
+ C or C++.
+\end_layout
+
+\begin_layout Standard
+In the course of developing the motif searching code, I first needed to
+ get the data in a form convenient for use.
+ The genome.ucsc.edu provides raw text dumps of their annotations database
+ and genome data in the .2bit format.
+ The annotations database includes gene locations on a chromosome as well
+ as a brief description of that gene.
+ The .2bit format is a compressed binary format where each file can contain
+ multiple sequences and each sequence has associated metadata.
+ The actual genetic code is stored four base pairs to a byte using the same
+ code as described above (T=0, ...).
+ The metadata includes a sequence name, e.g.
+ 'chrI' for chromosome I, and any masking regions in the genome, i.e.
+ places with incomplete data.
+ I created a Python class, Genome, to wrap around both the annotation (importing
+ it into a Sqlite3 database) information and to decode and cache the .2bit
+ information.
+ With an instance of the Genome class, it is easy to do tasks such as iterate
+ over all known gene (or non-gene) sequences in the genome or query for
+ other such related information.
 \end_layout
 
 \begin_layout Section
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Future-Work"
+
+\end_inset
+
 Future Work
 \end_layout
 
 \begin_layout Standard
-stuff
+The appropriate threshold to use for accepting a match from the mNW algorithm
+ is unknown to me.
+ Lower values mean less selectivity and potential duplication, but also
+ allow one to test fewer sequences and are more general in the motifs that
+ are returned.
+ Duplication can be accounted for by another round of the NW algorithm among
+ the top sequences to merge highly similar results.
+\end_layout
+
+\begin_layout Standard
+There are several correlation analyses which would be interesting to perform.
+ For example,
+\end_layout
+
+\begin_layout Itemize
+The correlation between motifs and gene sense -- are some motifs most often
+ associated with forward or reverse coded genes? Is there no bias?
+\end_layout
+
+\begin_layout Itemize
+The correlations between the top scoring motifs -- how similar are the top
+ scoring motifs? Could all of, say, the top 5 most frequent sequences really
+ be merged into a compound sequence represented by a single position weight
+ matrix?
+\end_layout
+
+\begin_layout Itemize
+What is the correlation between top scoring motifs and other low scoring
+ motifs? Similarly, are many of the low scoring motifs merely facets of
+ one larger compound motif?
+\end_layout
+
+\begin_layout Standard
+I'm also curious about improving the computational side of this method,
+ namely, increasing performance and accuracy.
+ It would be interesting to see if it could be adapted to a GPU to take
+ advantage the high parallelism available there.
+ Another promising idea is to adapt this technique to use some sort of multigrid
+ method.
+ Every motif of length N that is found also contains a motif of length N-1
+ that would have been found from a search of lengths N-1.
+ Therefor, one could start with shorter search lenghts, e.g.
+ 6--8, and use the top matches from that length as seed for the next higher
+ length.
+ This would significantly reduce the search space for longer motifs whose
+ permutations grow combinatorially.
+\end_layout
+
+\begin_layout Section
+Conclusion
+\end_layout
+
+\begin_layout Standard
+Convolution with the modified Needleman-Wunsch algorithm generated several
+ interesting motifs with strong evidence for biological significance among
+ the highest scoring.
+ This method of motif discovery is promising, but has much room for improvement
+ and optimization as currently implemented.
+ It is not suitable for all types of motif discovery or analysis, but could
+ be useful for highlighting motifs for further study or to be run on newly
+ sequenced genomes as a first line of analysis.
 \end_layout
 
 \begin_layout Section

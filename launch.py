@@ -13,9 +13,12 @@ if __name__ == '__main__':
         print 'Usage: %s <Num iterations> <Num basepairs> <Num saved>'%sys.argv[0]
         sys.exit(1)
 
-    clients = [('diglett.cs.washington.edu', 8),
-               ('charliebrown.cs.washington.edu', 8),
-               ('hobbes.cs.washington.edu', 7)]
+    clients = [#('diglett.cs.washington.edu', 8),
+               ('charliebrown.cs.washington.edu', 8)]
+               #('hobbes.cs.washington.edu', 7),
+               #('bicycle.cs.washington.edu', 4),
+               #('tricycle.cs.washington.edu', 4),
+               #('recycle.cs.washington.edu', 4)]
     procs = []
     # Start the worker processes
     for client,num_jobs in clients:

@@ -112,7 +112,5 @@ def convolveSubsequence(np.ndarray[BASETYPE_t, ndim=1] guess not None,
         score = v_matrix[guess_len, guess_len+slack]
         if score > guess_len - 2 - slack:
             score_deque.append((i, score))
-        #score = util.align(guess, target_seq[i:guess_len+i+slack], -1,
-        #                   util.nw_basepairs_cost, v_matrix, False)[0]
         score_max = float_max(score, score_max)
     return score_max
